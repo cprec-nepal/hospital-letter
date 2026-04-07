@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CPREC Admin Dashboard</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #f8fafc; }
+    .glass { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+    .stat-card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(148, 163, 184, 0.1); }
+    
+    /* Login Screen */
+    #login-screen {
+      position: fixed; inset: 0; z-index: 100;
+      background: #0f172a;
+      display: flex; align-items: center; justify-content: center;
+    }
+    
+    /* Modal Styles */
+    .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
+    .modal-content { background-color: #1e293b; margin: 5% auto; padding: 20px; border: 1px solid #334155; width: 90%; max-width: 500px; border-radius: 12px; }
+    
+    /* Table Styles */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8; }
+    td { padding: 12px; border-bottom: 1px solid #334155; vertical-align: middle; }
+    tr:hover { background-color: rgba(255,255,255,0.05); }
+  </style>
+</head>
+<body>
+
+  <!-- LOGIN SCREEN -->
+  <div id="login-screen">
+    <div class="glass p-8 rounded-2xl w-full max-w-sm text-center shadow-2xl border-t-4 border-cyan-500">
+      <div class="mb-6 flex justify-center">
+         <!-- Simple Lock Icon -->
+         <svg class="w-12 h-12 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+      </div>
+      <h2 class="text-2xl font-bold text-white mb-2">Admin Access</h2>
+      <p class="text-slate-400 text-sm mb-6">Enter passcode to continue</p>
+      
+      <input type="password" id="admin-passcode" class="w-full bg-slate-800 border border-slate-600 text-white rounded-lg px-4 py-3 mb-4 focus:outline-none focus:border-cyan-500 transition" placeholder="••••">
+      
+      <button onclick="attemptLogin()" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 rounded-lg transition transform active:scale-95">
+        Unlock Dashboard
+      </button>
+      <p id="login-error" class="text-red-400 text-sm mt-3 hidden">Invalid Passcode</p>
+    </div>
+  </div>
+
+  <!-- DASHBOARD CONTENT (Hidden by default) -->
+  <div id="dashboard-content" class="hidden min-h-screen p-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-8">
+      <div>
+        <h1 class="text-3xl font-bold text-white">CPREC Admin Dashboard</h1>
+        <p class="text-slate-400">Manage Membership Letters</p>
+      </div>
+      <!-- Refresh Button (Only visible after login) -->
+      <button onclick="loadData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+        Refresh Data
+      </button>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+      <div class="stat-card p-6 rounded-xl shadow-lg">
+        <p class="text-slate-400 text-sm">Total Requests</p>
+        <h2 id="stat-total" class="text-3xl font-bold text-white mt-2">0</h2>
+      </div>
+      <div class="stat-card p-6 rounded-xl shadow-lg border-l-4 border-yellow-500">
+        <p class="text-yellow-500 text-sm">Pending Approval</p>
+        <h2 id="stat-pending" class="text-3xl font-bold text-white mt-2">0</h2>
+      </div>
+      <div class="stat-card p-6 rounded-xl shadow-lg border-l-4 border-green-500">
+        <p class="text-green-500 text-sm">Sent Successfully</p>
+        <h2 id="stat-sent" class="text-3xl font-bold text-white mt-2">0</h2>
+      </div>
+      <div class="stat-card p-6 rounded-xl shadow-lg border-l-4 border-red-500">
+        <p class="text-red-500 text-sm">Errors</p>
+        <h2 id="stat-error" class="text-3xl font-bold text-white mt-2">0</h2>
+      </div>
+    </div>
+
+    <!-- Charts Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div class="glass p-6 rounded-xl">
+        <h3 class="text-lg font-semibold mb-4">Status Distribution</h3>
+        <canvas id="statusChart"></canvas>
+      </div>
+      <div class="glass p-6 rounded-xl">
+        <h3 class="text-lg font-semibold mb-4">Membership Types</h3>
+        <canvas id="typeChart"></canvas>
+      </div>
+    </div>
+
+    <!-- Data Table -->
+    <div class="glass rounded-xl overflow-hidden">
+      <div class="p-4 border-b border-slate-700 flex justify-between items-center">
+        <h3 class="font-semibold text-white">Recent Requests</h3>
+      </div>
+      <div class="overflow-x-auto">
+        <table id="dataTable">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Name</th>
+              <th>Email</th>
+              <th>Type</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tableBody">
+            <!-- Rows injected via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Edit Modal -->
+  <div id="editModal" class="modal">
+    <div class="modal-content">
+      <h3 class="text-xl font-bold text-white mb-4">Edit Request</h3>
+      <input type="hidden" id="edit-row-index">
+      
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-slate-400">Full Name</label>
+          <input type="text" id="edit-fullName" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400">Email</label>
+          <input type="email" id="edit-email" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400">Membership Type</label>
+          <select id="edit-type" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white">
+            <option value="General Member">General Member</option>
+            <option value="Friends and Family (FnF)">Friends and Family (FnF)</option>
+            <option value="Board Member">Board Member</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400">Patient Name</label>
+          <input type="text" id="edit-patient" class="w-full bg-slate-800 border border-slate-600 rounded p-2 text-white">
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeModal()" class="px-4 py-2 text-slate-300 hover:text-white">Cancel</button>
+        <button onclick="saveEdit()" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const CORRECT_PASSCODE = "2025";
+    let statusChartInstance = null;
+    let typeChartInstance = null;
+
+    // 1. LOGIN LOGIC
+    function attemptLogin() {
+      const input = document.getElementById('admin-passcode').value;
+      const errorMsg = document.getElementById('login-error');
+      
+      if (input === CORRECT_PASSCODE) {
+        // Success
+        document.getElementById('login-screen').classList.add('hidden');
+        document.getElementById('dashboard-content').classList.remove('hidden');
+        loadData(); // Load data immediately after login
+      } else {
+        // Fail
+        errorMsg.classList.remove('hidden');
+        document.getElementById('admin-passcode').value = '';
+        document.getElementById('admin-passcode').focus();
+      }
+    }
+
+    // Allow Enter key to submit
+    document.getElementById('admin-passcode').addEventListener('keypress', function (e) {
+      if (e.key === 'Enter') attemptLogin();
+    });
+
+    // 2. LOAD DATA
+    function loadData() {
+      google.script.run
+        .withSuccessHandler(renderDashboard)
+        .getDashboardData();
+    }
+
+    // 3. RENDER DASHBOARD
+    function renderDashboard(data) {
+      if(data.error) return alert(data.error);
+
+      // Update Stats
+      document.getElementById('stat-total').innerText = data.stats.total;
+      document.getElementById('stat-pending').innerText = data.stats.pending;
+      document.getElementById('stat-sent').innerText = data.stats.sent;
+      document.getElementById('stat-error').innerText = data.stats.error;
+
+      // Update Charts
+      renderCharts(data);
+
+      // Update Table
+      const tbody = document.getElementById('tableBody');
+      tbody.innerHTML = '';
+      
+      data.rows.forEach(row => {
+        let statusBadge = '';
+        if(row.status === 'Pending') statusBadge = '<span class="px-2 py-1 bg-yellow-500/20 text-yellow-500 rounded text-xs font-bold">PENDING</span>';
+        else if(row.status === 'Approved') statusBadge = '<span class="px-2 py-1 bg-blue-500/20 text-blue-500 rounded text-xs font-bold">APPROVED</span>';
+        else if(row.status === 'Sent') statusBadge = '<span class="px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs font-bold">SENT</span>';
+        else statusBadge = `<span class="px-2 py-1 bg-red-500/20 text-red-500 rounded text-xs font-bold">${row.status}</span>`;
+
+        // Action Buttons Logic
+        let actions = `
+          <button onclick="openEditModal(${row.id}, '${row.fullName}', '${row.email}', '${row.type}', '${row.patient}')" class="text-blue-400 hover:text-blue-300 mr-2 text-sm">Edit</button>
+        `;
+
+        if (row.status === 'Pending') {
+          actions += `<button onclick="updateStatus(${row.id}, 'Approved')" class="text-green-400 hover:text-green-300 font-bold text-sm">Approve</button>`;
+        } else if (row.status === 'Approved') {
+           actions += `<span class="text-slate-500 text-xs italic">Processing...</span>`;
+        }
+
+        const tr = `
+          <tr>
+            <td class="font-mono text-xs text-slate-400">${row.memberID}</td>
+            <td class="font-medium text-white">${row.fullName}</td>
+            <td class="text-slate-400 text-sm">${row.email}</td>
+            <td class="text-slate-400 text-sm">${row.type}</td>
+            <td>${statusBadge}</td>
+            <td>${actions}</td>
+          </tr>
+        `;
+        tbody.innerHTML += tr;
+      });
+    }
+
+    // 4. RENDER CHARTS
+    function renderCharts(data) {
+      const ctxStatus = document.getElementById('statusChart').getContext('2d');
+      const ctxType = document.getElementById('typeChart').getContext('2d');
+
+      // Count Types
+      const typeCounts = { "General Member": 0, "Friends and Family (FnF)": 0, "Board Member": 0 };
+      data.rows.forEach(r => { if(typeCounts[r.type] !== undefined) typeCounts[r.type]++ });
+
+      if (statusChartInstance) statusChartInstance.destroy();
+      statusChartInstance = new Chart(ctxStatus, {
+        type: 'doughnut',
+        data: {
+          labels: ['Pending', 'Sent', 'Error'],
+          datasets: [{
+            data: [data.stats.pending, data.stats.sent, data.stats.error],
+            backgroundColor: ['#eab308', '#22c55e', '#ef4444'],
+            borderWidth: 0
+          }]
+        },
+        options: { plugins: { legend: { position: 'bottom', labels: { color: '#94a3b8' } } } }
+      });
+
+      if (typeChartInstance) typeChartInstance.destroy();
+      typeChartInstance = new Chart(ctxType, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(typeCounts),
+          datasets: [{
+            label: 'Count',
+            data: Object.values(typeCounts),
+            backgroundColor: '#06b6d4',
+            borderRadius: 4
+          }]
+        },
+        options: {
+          scales: { y: { beginAtZero: true, ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }, x: { ticks: { color: '#94a3b8' } } },
+          plugins: { legend: { display: false } }
+        }
+      });
+    }
+
+    // 5. ACTIONS
+    function updateStatus(rowIndex, newStatus) {
+      if(!confirm(`Mark as ${newStatus}?`)) return;
+      
+      document.getElementById('tableBody').innerHTML = '<tr><td colspan="6" class="text-center py-4">Updating...</td></tr>';
+      
+      google.script.run
+        .withSuccessHandler(() => {
+          loadData(); // Reload to show changes
+        })
+        .withFailureHandler(err => alert("Error: " + err.message))
+        .updateRowStatus(rowIndex, newStatus);
+    }
+
+    // 6. EDIT MODAL FUNCTIONS
+    function openEditModal(index, name, email, type, patient) {
+      document.getElementById('edit-row-index').value = index;
+      document.getElementById('edit-fullName').value = name;
+      document.getElementById('edit-email').value = email;
+      document.getElementById('edit-type').value = type;
+      document.getElementById('edit-patient').value = patient;
+      document.getElementById('editModal').style.display = "block";
+    }
+
+    function closeModal() {
+      document.getElementById('editModal').style.display = "none";
+    }
+
+    function saveEdit() {
+      const data = {
+        rowIndex: document.getElementById('edit-row-index').value,
+        fullName: document.getElementById('edit-fullName').value,
+        email: document.getElementById('edit-email').value,
+        type: document.getElementById('edit-type').value,
+        patient: document.getElementById('edit-patient').value
+      };
+
+      google.script.run
+        .withSuccessHandler(() => {
+          closeModal();
+          loadData();
+        })
+        .withFailureHandler(err => alert("Error: " + err.message))
+        .editRowData(data);
+    }
+  </script>
+</body>
+</html>
