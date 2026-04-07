@@ -12,18 +12,15 @@
     .glass { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
     .stat-card { background: linear-gradient(145deg, #1e293b, #0f172a); border: 1px solid rgba(148, 163, 184, 0.1); }
     
-    /* Login Screen */
     #login-screen {
       position: fixed; inset: 0; z-index: 100;
       background: #0f172a;
       display: flex; align-items: center; justify-content: center;
     }
     
-    /* Modal Styles */
     .modal { display: none; position: fixed; z-index: 50; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); }
     .modal-content { background-color: #1e293b; margin: 5% auto; padding: 20px; border: 1px solid #334155; width: 90%; max-width: 500px; border-radius: 12px; }
     
-    /* Table Styles */
     table { width: 100%; border-collapse: collapse; }
     th { text-align: left; padding: 12px; border-bottom: 1px solid #334155; color: #94a3b8; }
     td { padding: 12px; border-bottom: 1px solid #334155; vertical-align: middle; }
@@ -36,7 +33,6 @@
   <div id="login-screen">
     <div class="glass p-8 rounded-2xl w-full max-w-sm text-center shadow-2xl border-t-4 border-cyan-500">
       <div class="mb-6 flex justify-center">
-         <!-- Simple Lock Icon -->
          <svg class="w-12 h-12 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
       </div>
       <h2 class="text-2xl font-bold text-white mb-2">Admin Access</h2>
@@ -51,7 +47,7 @@
     </div>
   </div>
 
-  <!-- DASHBOARD CONTENT (Hidden by default) -->
+  <!-- DASHBOARD CONTENT -->
   <div id="dashboard-content" class="hidden min-h-screen p-6">
 
     <!-- Header -->
@@ -60,7 +56,6 @@
         <h1 class="text-3xl font-bold text-white">CPREC Admin Dashboard</h1>
         <p class="text-slate-400">Manage Membership Letters</p>
       </div>
-      <!-- Refresh Button (Only visible after login) -->
       <button onclick="loadData()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition flex items-center gap-2">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
         Refresh Data
@@ -87,7 +82,7 @@
       </div>
     </div>
 
-    <!-- Charts Section -->
+    <!-- Charts -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
       <div class="glass p-6 rounded-xl">
         <h3 class="text-lg font-semibold mb-4">Status Distribution</h3>
@@ -99,7 +94,7 @@
       </div>
     </div>
 
-    <!-- Data Table -->
+    <!-- Table -->
     <div class="glass rounded-xl overflow-hidden">
       <div class="p-4 border-b border-slate-700 flex justify-between items-center">
         <h3 class="font-semibold text-white">Recent Requests</h3>
@@ -116,13 +111,10 @@
               <th>Actions</th>
             </tr>
           </thead>
-          <tbody id="tableBody">
-            <!-- Rows injected via JS -->
-          </tbody>
+          <tbody id="tableBody"></tbody>
         </table>
       </div>
     </div>
-
   </div>
 
   <!-- Edit Modal -->
@@ -162,54 +154,85 @@
   </div>
 
   <script>
-    const CORRECT_PASSCODE = "2025";
+    let SESSION_TOKEN = null; // Stores the secure token
     let statusChartInstance = null;
     let typeChartInstance = null;
 
-    // 1. LOGIN LOGIC
+    // 1. SERVER-SIDE LOGIN
     function attemptLogin() {
       const input = document.getElementById('admin-passcode').value;
       const errorMsg = document.getElementById('login-error');
       
-      if (input === CORRECT_PASSCODE) {
-        // Success
-        document.getElementById('login-screen').classList.add('hidden');
-        document.getElementById('dashboard-content').classList.remove('hidden');
-        loadData(); // Load data immediately after login
-      } else {
-        // Fail
-        errorMsg.classList.remove('hidden');
-        document.getElementById('admin-passcode').value = '';
-        document.getElementById('admin-passcode').focus();
-      }
+      // Disable button visually
+      const btn = document.querySelector('button[onclick="attemptLogin()"]');
+      const originalText = btn.innerText;
+      btn.innerText = "Verifying...";
+      btn.disabled = true;
+
+      // Call Server to verify
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (response.success) {
+            // Server said YES. Save Token.
+            SESSION_TOKEN = response.token;
+            
+            // Switch Screens
+            document.getElementById('login-screen').classList.add('hidden');
+            document.getElementById('dashboard-content').classList.remove('hidden');
+            
+            // Load Data
+            loadData();
+          } else {
+            // Server said NO
+            errorMsg.classList.remove('hidden');
+            document.getElementById('admin-passcode').value = '';
+            document.getElementById('admin-passcode').focus();
+            
+            // Reset Button
+            btn.innerText = originalText;
+            btn.disabled = false;
+          }
+        })
+        .withFailureHandler(function(err) {
+          alert("Connection Error: " + err.message);
+          btn.innerText = originalText;
+          btn.disabled = false;
+        })
+        .verifyPasscode(input);
     }
 
-    // Allow Enter key to submit
+    // Allow Enter key
     document.getElementById('admin-passcode').addEventListener('keypress', function (e) {
       if (e.key === 'Enter') attemptLogin();
     });
 
-    // 2. LOAD DATA
+    // 2. LOAD DATA (Now sends Token)
     function loadData() {
+      if (!SESSION_TOKEN) return; // Should not happen if logic works
+
       google.script.run
         .withSuccessHandler(renderDashboard)
-        .getDashboardData();
+        .getDashboardData(SESSION_TOKEN); // <--- TOKEN SENT HERE
     }
 
     // 3. RENDER DASHBOARD
     function renderDashboard(data) {
-      if(data.error) return alert(data.error);
+      if(data.error) {
+        alert("Session Expired or Invalid. Please login again.");
+        location.reload(); // Force Reload
+        return;
+      }
 
-      // Update Stats
+      // Stats
       document.getElementById('stat-total').innerText = data.stats.total;
       document.getElementById('stat-pending').innerText = data.stats.pending;
       document.getElementById('stat-sent').innerText = data.stats.sent;
       document.getElementById('stat-error').innerText = data.stats.error;
 
-      // Update Charts
+      // Charts
       renderCharts(data);
 
-      // Update Table
+      // Table
       const tbody = document.getElementById('tableBody');
       tbody.innerHTML = '';
       
@@ -220,7 +243,6 @@
         else if(row.status === 'Sent') statusBadge = '<span class="px-2 py-1 bg-green-500/20 text-green-500 rounded text-xs font-bold">SENT</span>';
         else statusBadge = `<span class="px-2 py-1 bg-red-500/20 text-red-500 rounded text-xs font-bold">${row.status}</span>`;
 
-        // Action Buttons Logic
         let actions = `
           <button onclick="openEditModal(${row.id}, '${row.fullName}', '${row.email}', '${row.type}', '${row.patient}')" class="text-blue-400 hover:text-blue-300 mr-2 text-sm">Edit</button>
         `;
@@ -250,7 +272,6 @@
       const ctxStatus = document.getElementById('statusChart').getContext('2d');
       const ctxType = document.getElementById('typeChart').getContext('2d');
 
-      // Count Types
       const typeCounts = { "General Member": 0, "Friends and Family (FnF)": 0, "Board Member": 0 };
       data.rows.forEach(r => { if(typeCounts[r.type] !== undefined) typeCounts[r.type]++ });
 
@@ -287,7 +308,7 @@
       });
     }
 
-    // 5. ACTIONS
+    // 5. UPDATE STATUS (Sends Token)
     function updateStatus(rowIndex, newStatus) {
       if(!confirm(`Mark as ${newStatus}?`)) return;
       
@@ -295,13 +316,13 @@
       
       google.script.run
         .withSuccessHandler(() => {
-          loadData(); // Reload to show changes
+          loadData(); 
         })
         .withFailureHandler(err => alert("Error: " + err.message))
-        .updateRowStatus(rowIndex, newStatus);
+        .updateRowStatus(SESSION_TOKEN, rowIndex, newStatus); // <--- TOKEN SENT HERE
     }
 
-    // 6. EDIT MODAL FUNCTIONS
+    // 6. EDIT MODAL
     function openEditModal(index, name, email, type, patient) {
       document.getElementById('edit-row-index').value = index;
       document.getElementById('edit-fullName').value = name;
@@ -330,7 +351,7 @@
           loadData();
         })
         .withFailureHandler(err => alert("Error: " + err.message))
-        .editRowData(data);
+        .editRowData(SESSION_TOKEN, data); // <--- TOKEN SENT HERE
     }
   </script>
 </body>
